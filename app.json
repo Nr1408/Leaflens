@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "LeafLens",
+    "slug": "LeafLens",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "extra": {
+      "API_BASE_URL": "http://192.168.29.184:8000",
+      "SUPABASE_URL": "https://ktemdwwnvjuuwjlegvzc.supabase.co",
+      "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt0ZW1kd3dudmp1dXdqbGVndnpjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA3Nzc4OTAsImV4cCI6MjA3NjM1Mzg5MH0.PxCFEPFzBXHbFhDioCtTLLu0idM_PpEOYjm09rXSnBA"
+    },
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": []
+  }
+}
