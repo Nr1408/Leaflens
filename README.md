@@ -55,3 +55,44 @@ Label mapping
 Notes
 - Expo Go supports tfjs-react-native on Android/iOS. Initializing the WebGL backend may fall back to CPU; that’s okay for small models.
 - If you see performance issues, consider EAS Build with Hermes and production bundles.
+
+## Backend API (banana_api) – Docker deploy
+
+This repo contains a lightweight FastAPI service for cloud inference located in `banana_api/`. You can containerize and run it locally or deploy to a platform like Render/Railway.
+
+Prereqs
+- Docker Desktop installed
+
+Build the image (PowerShell)
+```powershell
+cd banana_api
+docker build -t leaflens-api:latest .
+```
+
+Run locally on port 8000
+```powershell
+docker run --rm -p 8000:8000 leaflens-api:latest
+```
+
+Test the API
+```powershell
+curl http://localhost:8000/
+# For POST /predict, send multipart-form file named "file"
+```
+
+Push to Docker Hub (optional)
+```powershell
+# Replace YOUR_DOCKERHUB with your username
+docker tag leaflens-api:latest YOUR_DOCKERHUB/leaflens-api:latest
+docker push YOUR_DOCKERHUB/leaflens-api:latest
+```
+
+Deploy on Render
+- Create a new Web Service from your GitHub repo or the pushed Docker image
+- If using repo, Render will detect the Dockerfile in `banana_api/` when you set the service root to that folder
+- Exposed port: 8000
+- Instance type: start with a small CPU instance; upgrade if needed
+
+Notes
+- The large training `.pth` model is intentionally not committed. For cloud inference, either use a compact exported model or download it at container start-up.
+- See `src/services/README-model-downloader.md` for ideas on managing model artifacts.
