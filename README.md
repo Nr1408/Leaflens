@@ -56,43 +56,100 @@ Notes
 - Expo Go supports tfjs-react-native on Android/iOS. Initializing the WebGL backend may fall back to CPU; that’s okay for small models.
 - If you see performance issues, consider EAS Build with Hermes and production bundles.
 
-## Backend API (banana_api) – Docker deploy
+## Backend API (banana_api) – Docker-only workflow
 
-This repo contains a lightweight FastAPI service for cloud inference located in `banana_api/`. You can containerize and run it locally or deploy to a platform like Render/Railway.
+This repo includes a FastAPI service in `banana_api/` designed to run in Docker. You can run it locally with Docker Desktop or deploy via CI to a registry and a platform like Render.
 
-Prereqs
-- Docker Desktop installed
+### Install Docker Desktop (Windows)
 
-Build the image (PowerShell)
+Either download from: https://www.docker.com/products/docker-desktop/
+
+Or install via PowerShell:
+
+```powershell
+winget install -e --id Docker.DockerDesktop
+```
+
+After installation, start Docker Desktop and ensure `docker --version` works in a new PowerShell window.
+
+### Build and run locally
+
+Option A — mount your local model (recommended):
+
 ```powershell
 cd banana_api
 docker build -t leaflens-api:latest .
+
+# Mount your model; replace the path if needed
+docker run --rm -p 8000:8000 `
+   -v C:\LeafLens\banana_api\best_model.pth:/app/best_model.pth:ro `
+   -e MODEL_PATH=/app/best_model.pth `
+   leaflens-api:latest
 ```
 
-Run locally on port 8000
+Option B — download model at startup (no mount):
+
 ```powershell
-docker run --rm -p 8000:8000 leaflens-api:latest
+cd banana_api
+docker build -t leaflens-api:latest .
+
+docker run --rm -p 8000:8000 `
+   -e MODEL_URL="https://<your-direct-url>/best_model.pth" `
+   -e MODEL_PATH="/app/best_model.pth" `
+   leaflens-api:latest
 ```
 
-Test the API
+Option C — docker compose (mounts model by default):
+
 ```powershell
-curl http://localhost:8000/
-# For POST /predict, send multipart-form file named "file"
+cd banana_api
+docker compose up -d
+# later
+docker compose down
 ```
 
-Push to Docker Hub (optional)
+### Test endpoints (local)
+
 ```powershell
-# Replace YOUR_DOCKERHUB with your username
-docker tag leaflens-api:latest YOUR_DOCKERHUB/leaflens-api:latest
-docker push YOUR_DOCKERHUB/leaflens-api:latest
+# Health
+curl.exe -s http://127.0.0.1:8000/
+
+# Browser UI (upload & predict)
+# Open http://127.0.0.1:8000/ui
+
+# CLI upload
+curl.exe -s -F "file=@C:\LeafLens\assets\img\landing-hero.jpg" http://127.0.0.1:8000/predict/
 ```
 
-Deploy on Render
-- Create a new Web Service from your GitHub repo or the pushed Docker image
-- If using repo, Render will detect the Dockerfile in `banana_api/` when you set the service root to that folder
+### CI: build & publish image to GHCR
+
+On push to `main`, GitHub Actions builds and pushes the image to GitHub Container Registry using `.github/workflows/docker-image.yml`.
+
+- Image: `ghcr.io/<owner>/leaflens-api:latest`
+- Example for this repo: `ghcr.io/nr1408/leaflens-api:latest`
+
+Pull the image:
+
+```powershell
+docker pull ghcr.io/nr1408/leaflens-api:latest
+```
+
+Note: The workflow uses the built-in `GITHUB_TOKEN` with `packages: write` permission.
+
+### Deploy on Render (docker)
+
+Render can build from the Dockerfile using the `render.yaml` in the repo root.
+
+Steps:
+- Connect your GitHub repo on Render
+- Render will detect `render.yaml` and create a Web Service
+- Set env vars:
+   - `MODEL_URL` = your direct model URL (or mount via a persistent disk and set `MODEL_PATH`)
+   - `MODEL_PATH` = `/app/best_model.pth`
 - Exposed port: 8000
-- Instance type: start with a small CPU instance; upgrade if needed
 
-Notes
-- The large training `.pth` model is intentionally not committed. For cloud inference, either use a compact exported model or download it at container start-up.
-- See `src/services/README-model-downloader.md` for ideas on managing model artifacts.
+If you prefer building elsewhere (e.g., GHCR), point Render to `ghcr.io/nr1408/leaflens-api:latest`.
+
+### Notes
+- The `.dockerignore` excludes `.pth` and other large artifacts from the image; supply the model at runtime via bind mount or `MODEL_URL`.
+- Static upload UI is available at `/ui` inside the container.
