@@ -1,5 +1,7 @@
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, HTMLResponse
 from PIL import Image
 import io
 import inference
@@ -24,6 +26,31 @@ MODEL = inference.load_model()
 def read_root():
     """Simple health check endpoint."""
     return {"status": "Banana Disease Detector API is running", "model_status": "Loaded"}
+
+# --- Static files and simple UI ---
+# Serve files under /static (for CSS/JS/assets) and expose a minimal upload UI at /ui
+try:
+    app.mount("/static", StaticFiles(directory="static"), name="static")
+except Exception:
+    # If the directory doesn't exist, skip mounting; UI route can still fallback
+    pass
+
+@app.get("/ui", response_class=HTMLResponse)
+def upload_ui():
+    """Serve a simple HTML upload UI to test predictions."""
+    try:
+        return FileResponse("static/index.html")
+    except Exception:
+        # Fallback minimal HTML if file missing
+        return """
+        <!doctype html>
+        <meta charset='utf-8'/>
+        <title>LeafLens UI</title>
+        <p>UI file missing. POST an image to <code>/predict/</code> using curl or Postman.</p>
+        <pre>
+        curl -F "file=@/path/to/image.jpg" http://localhost:8000/predict/
+        </pre>
+        """
 
 @app.post("/predict/")
 async def predict_image_endpoint(file: UploadFile = File(...)):

@@ -12,6 +12,7 @@ RUN apt-get update \
        libgl1 \
        libglib2.0-0 \
        libgomp1 \
+         libjpeg62-turbo \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
@@ -28,6 +29,7 @@ RUN pip install --no-cache-dir --upgrade pip \
 COPY inference.py ./
 COPY model.py ./
 COPY app.py ./
+COPY static ./static
 
 # Create directories for uploads/results if app needs them (safe no-op otherwise)
 RUN mkdir -p static/uploads static/results
