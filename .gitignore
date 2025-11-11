@@ -49,4 +49,10 @@ yarn-error.*
 .ruff_cache/
 *.log
 banana_api/.venv/
+banana_api/.venv-api/
 banana_api/.env
+banana_api/venv/
+banana_api/ENV/
+banana_api/.env.local
+banana_api/.python-version
+banana_api/best_model.pth
