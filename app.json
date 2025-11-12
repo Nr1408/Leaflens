@@ -31,6 +31,8 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": []
+    "plugins": [
+      ["react-native-fast-tflite", {"enableAndroidGpuLibraries": true, "enableCoreMLDelegate": true}]
+    ]
   }
 }

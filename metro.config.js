@@ -9,7 +9,8 @@ module.exports = {
     ...(base.resolver || {}),
     assetExts: [
       ...((base.resolver && base.resolver.assetExts) || []),
-      'bin'
+      'bin',
+      'tflite'
     ],
   },
 };
