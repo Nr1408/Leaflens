@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, Image, StyleSheet, ActivityIndicator, Alert, ScrollView } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 // Note: This screen is deprecated (diagnosis is inline on Home). Keep lightweight typing to avoid TS errors.
-import { diagnoseImage } from '../services/cloudInference';
+// Use local on-device inference (stubbed until native/TFJS wiring complete)
+import { diagnoseImage } from '../services';
 import { Screen, PrimaryButton, HeaderBar, SectionCard, AnimatedActionTile } from '../ui/components';
 import { Feather } from '@expo/vector-icons';
 import { colors, spacing } from '../ui/theme';

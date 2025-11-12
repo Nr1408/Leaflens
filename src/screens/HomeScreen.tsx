@@ -10,7 +10,8 @@ import AppHeader from '../ui/AppHeader';
 import { getHistory, DiagnosisItem, clearHistory } from '../services/history';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { diagnoseImage } from '../services/cloudInference';
+// Use local on-device inference (stubbed until native/TFJS wiring complete)
+import { diagnoseImage } from '../services';
 import { addDiagnosis } from '../services/history';
 import { getDiseaseInfo } from '../data/bananaInfo';
 import { t } from '../i18n';

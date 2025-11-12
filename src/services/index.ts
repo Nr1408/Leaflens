@@ -1,2 +1,3 @@
 export * from './health';
-export * from './cloudInference';
+// Switch the app to use local, on-device inference instead of cloud calls
+export * from './tfliteService';
