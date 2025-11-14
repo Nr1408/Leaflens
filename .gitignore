@@ -66,3 +66,7 @@ assets/models/**/*.ptl
 assets/models/**/*.pt
 assets/models/**/*.pth
 assets/models/**/*.onnx
+
+# Editor and temp files
+.idea/
+safe.patch
