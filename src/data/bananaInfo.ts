@@ -1,3 +1,8 @@
+/*
+  Banana disease info
+  - Small built-in knowledge base used to show symptoms and treatments
+    for the top diagnosis. Mapped by canonical names and aliases.
+*/
 export type DiseaseInfo = {
   name: string;
   symptoms: string[];
@@ -159,6 +164,7 @@ function norm(s: string) {
     .replace(/^_|_$/g, '');
 }
 
+// Look up disease info by label, handling aliases and basic title-casing
 export function getDiseaseInfo(label: string): DiseaseInfo | null {
   if (!label) return null;
   // direct match first

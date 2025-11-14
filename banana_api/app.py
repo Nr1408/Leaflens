@@ -1,3 +1,9 @@
+"""
+FastAPI service for LeafLens
+- Accepts an uploaded image at /predict/ and returns top predictions
+    with a simple threshold to mark unknown/no-disease cases.
+"""
+
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles

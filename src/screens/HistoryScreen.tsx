@@ -1,3 +1,6 @@
+// History screen
+// Shows a simple list of previous diagnoses stored locally.
+// Lets the user clear all entries.
 import React from 'react';
 import { View, Text } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -14,6 +17,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'History'>;
 export default function HistoryScreen({ navigation }: Props) {
   const [items, setItems] = React.useState<DiagnosisItem[]>([]);
   React.useEffect(() => {
+    // Refresh history each time the screen gets focus so the list stays current.
     const sub = navigation.addListener('focus', async () => setItems(await getHistory()));
     return sub;
   }, [navigation]);

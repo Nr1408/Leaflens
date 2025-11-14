@@ -1,3 +1,7 @@
+/*
+  AppHeader
+  - Compact top bar with brand and quick nav icons (home, community, history, profile).
+*/
 import React from 'react';
 import { View, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +25,7 @@ export default function AppHeader({ title, onHome, onCommunity, onHistory, onPro
   <Text style={{ color: colors.text, fontWeight: '800', fontSize: 20 }}>{title || t('brand')}</Text>
       </View>
       <View style={{ flexDirection: 'row', gap: 16 }}>
+        {/* Simple tappable icons instead of full Buttons to keep it minimal */}
         <Text onPress={onHome}>
           <Ionicons name="home-outline" size={22} color={colors.text} />
         </Text>

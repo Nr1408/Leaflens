@@ -1,3 +1,8 @@
+"""
+Model loading and inference helpers
+- Loads HybridCNNViT weights, prepares transforms, and returns class confidences.
+"""
+
 import os
 import urllib.request
 import torch

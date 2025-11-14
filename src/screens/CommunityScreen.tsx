@@ -1,3 +1,6 @@
+// Community screen
+// A very lightweight forum: list posts, create/edit/delete, filter by category.
+// Data comes from Supabase when available, otherwise falls back to AsyncStorage.
 import React from 'react';
 import { View, Text, TouchableOpacity, Modal, TextInput, ScrollView, StyleSheet } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -24,6 +27,7 @@ export default function CommunityScreen({ navigation }: Props) {
   const [categoryOpen, setCategoryOpen] = React.useState(false);
 
   React.useEffect(() => {
+    // Load posts once on mount.
     (async () => {
       setLoading(true);
       setPosts(await listPosts());
@@ -43,6 +47,7 @@ export default function CommunityScreen({ navigation }: Props) {
     } else {
       await createPost({ title: title.trim(), content: content.trim(), category, author_name: (user?.username || user?.email) ?? null });
     }
+    // Refresh the list after any create/update.
     setPosts(await listPosts());
     setShowModal(false);
     resetForm();
@@ -50,6 +55,7 @@ export default function CommunityScreen({ navigation }: Props) {
 
   const onDelete = async (id: string) => {
     await deletePost(id);
+    // Refresh after delete.
     setPosts(await listPosts());
   };
 
@@ -91,6 +97,7 @@ export default function CommunityScreen({ navigation }: Props) {
             </TouchableOpacity>
           </View>
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: spacing(6) }}>
+            {/* Render posts newest-first by default (supabase returns sorted). */}
             {posts.map(p => (
               <Card key={p.id} style={{ marginBottom: spacing(1.5) }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -123,6 +130,7 @@ export default function CommunityScreen({ navigation }: Props) {
         </>
       )}
 
+      {/* Create/Edit modal */}
       <Modal visible={showModal} animationType="slide" transparent>
         <View style={{ flex: 1, backgroundColor: '#00000077', justifyContent: 'center', padding: spacing(2) }}>
           <View style={{ backgroundColor: colors.card, borderRadius: 16, padding: spacing(2) }}>

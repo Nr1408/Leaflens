@@ -1,6 +1,6 @@
 ﻿# LeafLens Annotated Code Guide
 
-This document explains the core LeafLens codebase endâ€‘toâ€‘end: what each module does, how data flows from the camera/gallery to the FastAPI inference server, and how results render in the app. It includes curated code excerpts with commentary, guidance on configuration, and troubleshooting tips.
+This document explains the core LeafLens codebase end-to-end: what each module does, how data flows from the camera/gallery to the FastAPI inference server, and how results render in the app. It includes curated code excerpts with commentary, guidance on configuration, and troubleshooting tips.
 
 Use this as the onboarding reference and a practical maintenance guide.
 
@@ -10,10 +10,10 @@ Use this as the onboarding reference and a practical maintenance guide.
 
 - Client: React Native + Expo app (Navigation, Auth via Supabase, image capture/pick, upload to server, render results, local history).
 - Server: FastAPI service loading a PyTorch model from `best_model.pth`, providing a `/predict/` endpoint returning `top1` and `topK`.
-- Networking: `fetch` with multipart `FormData`, timeouts via `AbortController`, base URL from `app.json` â†’ `extra.API_BASE_URL`.
+- Networking: `fetch` with multipart `FormData`, timeouts via `AbortController`, base URL from `app.json` -> `extra.API_BASE_URL`.
 - Persistence: `AsyncStorage` stores recent diagnoses and Supabase sessions.
 
-Highâ€‘level flow: Home â†’ take photo/pick â†’ upload â†’ receive JSON â†’ map to friendly disease info â†’ Result screen â†’ optional history panel.
+High-level flow: Home -> take photo/pick -> upload -> receive JSON -> map to friendly disease info -> Result screen -> optional history panel.
 
 ---
 
@@ -84,7 +84,7 @@ File: `app.json`
 ```
 
 Notes:
-- `extra.API_BASE_URL` drives the client â†’ server endpoint.
+- `extra.API_BASE_URL` drives the client -> server endpoint.
 - Set these per environment; do not commit secrets.
 
 File: `src/config/api.ts`
@@ -241,7 +241,7 @@ Notes:
 
 File: `src/screens/ResultScreen.tsx`
 
-Purpose: Visualize output with confidence, show topâ€‘3 alternatives, and curated info (symptoms/treatment).
+Purpose: Visualize output with confidence, show top-3 alternatives, and curated info (symptoms/treatment).
 
 ```tsx
 {imageUri && <Image source={{ uri: imageUri }} style={{ width: '100%', height: 240 }} />}
@@ -258,7 +258,7 @@ Purpose: Visualize output with confidence, show topâ€‘3 alternatives, and c
 ```
 
 Notes:
-- For â€œUnknownâ€ cases, the Home normalization ensures top predictions arenâ€™t misleading.
+- For "Unknown" cases, the Home normalization ensures top predictions aren't misleading.
 
 ---
 
@@ -284,7 +284,7 @@ Notes:
 
 File: `src/data/bananaInfo.ts`
 
-- Maps model labels (and aliases) to userâ€‘friendly names, symptoms, and treatment guidance.
+- Maps model labels (and aliases) to user-friendly names, symptoms, and treatment guidance.
 
 ```ts
 export function getDiseaseInfo(label: string): DiseaseInfo | null {
@@ -292,7 +292,7 @@ export function getDiseaseInfo(label: string): DiseaseInfo | null {
   const n = norm(label);
   const key = aliases[n];
   if (key && bananaDiseaseLibrary[key]) return bananaDiseaseLibrary[key];
-  // basic titleâ€‘case heuristic
+  // basic title-case heuristic
   const guess = label.split(/[\_\-\s]+/).map(...).join(' ');
   if (bananaDiseaseLibrary[guess]) return bananaDiseaseLibrary[guess];
   return null;
@@ -382,12 +382,12 @@ Notes:
 
 ---
 
-12. Endâ€‘toâ€‘End Data Flow
+12. End-to-End Data Flow
 
-1) Home: user captures/picks â†’ `diagnoseImage(uri)`
-2) `cloudInference`: builds `FormData` â†’ POST `/predict/` with timeout/retry
-3) Server: loads model once â†’ predict â†’ returns `top1` + `topK`
-4) Home: normalizes â†’ navigate to `Result`
+1) Home: user captures/picks -> `diagnoseImage(uri)`
+2) `cloudInference`: builds `FormData` -> POST `/predict/` with timeout/retry
+3) Server: loads model once -> predict -> returns `top1` + `topK`
+4) Home: normalizes -> navigate to `Result`
 5) Result: render image, confidence, alternatives, curated info
 6) History: store last 5 in `AsyncStorage`
 
@@ -395,9 +395,9 @@ Notes:
 
 13. Configuration Tips
 
-- API base URL: ensure mobile device and server are on the same network; update `app.json â†’ extra.API_BASE_URL`.
+- API base URL: ensure mobile device and server are on the same network; update `app.json -> extra.API_BASE_URL`.
 - Android emulator uses `10.0.2.2:<port>` for host machine.
-- Consider `.env` + `app.config.ts` for perâ€‘env config in production.
+- Consider `.env` + `app.config.ts` for per-env config in production.
 
 ---
 
@@ -411,7 +411,7 @@ Notes:
   - Increase `timeoutMs` in `diagnoseImage` for very large images.
   - Use server logs (Uvicorn) to confirm request arrival.
 - Wrong labels:
-  - Verify preâ€‘processing matches training (`Resize(224,224)`, normalization).
+  - Verify pre-processing matches training (`Resize(224,224)`, normalization).
   - Update `bananaInfo` aliases to map model outputs to friendly names.
 
 ---
@@ -419,14 +419,14 @@ Notes:
 15. Extending the App
 
 - Offline inference: add a TFJS model or TFLite; wire a local `modelService` with the same return shape as `/predict/`.
-- Confidence gating: client can hide `topK` below a threshold or label as â€œNo disease foundâ€.
+- Confidence gating: client can hide `topK` below a threshold or label as "No disease found".
 - Analytics: add event logging for diagnosis events.
 
 ---
 
 16. Security Considerations
 
-- Do not commit Supabase anon keys for production; use environmentâ€‘specific configs and secure distribution.
+- Do not commit Supabase anon keys for production; use environment-specific configs and secure distribution.
 - Lock down CORS in FastAPI to known origins for production.
 
 ---
@@ -462,7 +462,7 @@ Docker (server): see `banana_api/README-Docker.md`.
 
 19. Key Design Choices
 
-- Simple JSON schema: `top1`, `topK`, and backwardâ€‘compatible `predictions` array or dict.
+- Simple JSON schema: `top1`, `topK`, and backward-compatible `predictions` array or dict.
 - Robust upload: retries + long timeout + endpoint variants.
 - Curated info decoupled from model outputs via alias mapping.
 
@@ -491,8 +491,6 @@ C) Model URL override (server)
 CHECKPOINT_PATH = os.environ.get("MODEL_PATH", "best_model.pth")
 CHECKPOINT_URL = os.environ.get("MODEL_URL")
 ```
-
-
 
 ---
 
@@ -572,7 +570,7 @@ export default function AppHeader({ title, onHome, onCommunity, onHistory, onPro
 
 File: `src/i18n.ts`
 
-- Simple dictionaryâ€‘based localization for English, Hindi, and Marathi.
+- Simple dictionary-based localization for English, Hindi, and Marathi.
 
 ```ts
 export type Language = 'English' | 'Hindi' | 'Marathi';
@@ -591,7 +589,7 @@ Tips:
 
 File: `src/services/settings.ts`
 
-- Loads/saves `AppSettings` in `AsyncStorage`; includes a tiny pubâ€‘sub to notify listeners on change.
+- Loads/saves `AppSettings` in `AsyncStorage`; includes a tiny pub-sub to notify listeners on change.
 
 ```ts
 export async function updateSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
@@ -678,7 +676,7 @@ Files: `src/screens/ProfileScreen.tsx`, `src/screens/SettingsScreen.tsx`
 
 Files: `src/shims/expo-camera.js`, `src/shims/react-native-fs.js`
 
-- Provide minimal modules so thirdâ€‘party libraries bundle under Expo managed workflow.
+- Provide minimal modules so third-party libraries bundle under Expo managed workflow.
 
 ```js
 // expo-camera shim
@@ -748,7 +746,7 @@ export * from './tfliteService';
 
 35. Next Steps
 
-- Migrate offline inference from stub to a concrete backend (TFJS or TFLite) and gate via Settings â†’ Offline Mode.
+- Migrate offline inference from stub to a concrete backend (TFJS or TFLite) and gate via Settings -> Offline Mode.
 - Add instrumented logging for upload timings to improve retry/backoff logic.
 - Write unit tests for `settings`, `bananaInfo`, and `community` helpers.
 
@@ -779,7 +777,7 @@ module.exports = {
 ```
 
 Why it matters:
-- Allows bundling `.tflite` (and custom `.bin`) model files when moving to onâ€‘device inference.
+- Allows bundling `.tflite` (and custom `.bin`) model files when moving to on-device inference.
 
 `babel.config.js`
 
@@ -816,8 +814,3 @@ Notes:
 
 Tips:
 - When adding native ML libs (e.g., TFLite, ONNX), prefer Expo Dev Builds and ensure Metro asset extensions include model formats.
-
-
-
-
-

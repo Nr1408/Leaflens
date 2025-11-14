@@ -1,3 +1,6 @@
+// Profile screen
+// Shows basic account info (username/email) from our auth context,
+// and offers quick actions like opening Settings or logging out.
 import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -42,6 +45,7 @@ export default function ProfileScreen({ navigation }: Props) {
           <TouchableOpacity activeOpacity={0.9} onPress={() => navigation.navigate('Settings')} style={{ flex: 1, borderWidth: 1, borderColor: colors.divider, backgroundColor: colors.bgAlt, paddingVertical: spacing(1.75), borderRadius: 12, alignItems: 'center' }}>
             <Text style={{ color: colors.text, fontWeight: '700' }}>{t('openSettings')}</Text>
           </TouchableOpacity>
+          {/* Logout ends the auth session and returns user to unauthenticated state */}
           <TouchableOpacity activeOpacity={0.9} onPress={async () => { await logout(); }} style={{ flex: 1, backgroundColor: '#EF4444', paddingVertical: spacing(1.75), borderRadius: 12, alignItems: 'center' }}>
             <Text style={{ color: 'white', fontWeight: '800' }}>{t('logout')}</Text>
           </TouchableOpacity>

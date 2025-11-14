@@ -1,3 +1,6 @@
+// Legacy diagnose screen (kept for reference/testing)
+// Note: Home screen already embeds the diagnosis flow. This screen remains as
+// a simple, self-contained page to pick/take an image and run inference.
 import React, { useEffect, useState } from 'react';
 import { View, Text, Image, StyleSheet, ActivityIndicator, Alert, ScrollView } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -48,9 +51,11 @@ export default function DiagnoseScreen({ navigation }: Props) {
     if (!imageUri) return;
     setBusy(true);
     try {
+      // Ask the inference service to analyze the image.
       const json: any = await diagnoseImage(imageUri, {});
 
       let topK: { label: string; probability: number }[] = [];
+      // Normalize different backend response shapes into a shared topK list.
       if (Array.isArray(json?.topK)) {
         topK = json.topK.map((p: any) => ({ label: String(p.label ?? p.class ?? p.name ?? 'Unknown'), probability: Number(p.probability ?? p.score ?? p.confidence ?? 0) }));
       } else if (Array.isArray(json?.predictions)) {
@@ -66,12 +71,15 @@ export default function DiagnoseScreen({ navigation }: Props) {
       if (!topK.length) {
         topK = [{ label: 'Unknown', probability: 0 }];
       }
+      // Prefer provided top1; otherwise use first of topK
       const top1 = json?.top1
         ? { label: String(json.top1.label ?? json.top1.class ?? json.top1.name ?? 'Unknown'), probability: Number(json.top1.probability ?? json.top1.score ?? json.top1.confidence ?? 0) }
         : topK[0];
 
+      // Navigate to the result page and save to local history.
       navigation.navigate('Result', { label: top1.label, probability: top1.probability, topK, imageUri });
       addDiagnosis({ label: top1.label, probability: top1.probability, imageUri }).catch(() => {});
+      // Simple risk hint: high confidence and not a healthy label.
       if (top1.probability > 0.7 && top1.label !== 'Healthy Banana' && top1.label !== 'Healthy Banana  leaf') {
         setRisk('high');
       } else {
@@ -87,6 +95,7 @@ export default function DiagnoseScreen({ navigation }: Props) {
   return (
     <Screen>
       <HeaderBar title="Diagnose Your Plant" />
+      {/* Choose camera or gallery, preview the image, then run diagnosis */}
       <ScrollView contentContainerStyle={{ paddingBottom: spacing(4) }} showsVerticalScrollIndicator={false}>
         <View style={{ flexDirection: 'row', marginBottom: spacing(2) }}>
           <AnimatedActionTile label="Scan Leaf" onPress={takePhoto} icon={<Feather name="camera" size={34} color={colors.text} />} />

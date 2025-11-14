@@ -1,3 +1,8 @@
+/*
+  Community service
+  - Tries to read/write posts via Supabase when available.
+  - Falls back to local AsyncStorage for fully offline usage.
+*/
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './supabaseClient';
 
@@ -17,6 +22,7 @@ const STORAGE_KEY = 'leaflens.community.posts.v1';
 
 const uid = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
+// Local store helpers
 async function storageGet(): Promise<CommunityPost[]> {
   const raw = await AsyncStorage.getItem(STORAGE_KEY);
   return raw ? (JSON.parse(raw) as CommunityPost[]) : [];
@@ -26,6 +32,7 @@ async function storageSet(posts: CommunityPost[]): Promise<void> {
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(posts));
 }
 
+// List newest-first; prefer server but gracefully fallback to local
 export async function listPosts(): Promise<CommunityPost[]> {
   try {
     // Try Supabase if configured and table exists.
@@ -51,6 +58,7 @@ export async function listPosts(): Promise<CommunityPost[]> {
   return storageGet();
 }
 
+// Create a post on server when possible; else store locally
 export async function createPost(input: { title: string; content: string; category: CommunityCategory; author_id?: string | null; author_name?: string | null; }): Promise<CommunityPost> {
   const now = Date.now();
   // Try Supabase first
@@ -96,6 +104,7 @@ export async function createPost(input: { title: string; content: string; catego
   return post;
 }
 
+// Update title/content/category by id in server or local store
 export async function updatePost(id: string, patch: Partial<Pick<CommunityPost, 'title' | 'content' | 'category'>>): Promise<void> {
   try {
     const { error } = await supabase
@@ -114,6 +123,7 @@ export async function updatePost(id: string, patch: Partial<Pick<CommunityPost, 
   }
 }
 
+// Delete a post by id in server or local store
 export async function deletePost(id: string): Promise<void> {
   try {
     const { error } = await supabase

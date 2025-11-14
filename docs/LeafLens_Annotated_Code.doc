@@ -1,0 +1,825 @@
+{\rtf1\ansi\deff0
+# LeafLens Annotated Code Guide\par
+\par
+This document explains the core LeafLens codebase end???to???end: what each module does, how data flows from the camera/gallery to the FastAPI inference server, and how results render in the app. It includes curated code excerpts with commentary, guidance on configuration, and troubleshooting tips.\par
+\par
+Use this as the onboarding reference and a practical maintenance guide.\par
+\par
+---\par
+\par
+1. Architecture Overview\par
+\par
+- Client: React Native + Expo app (Navigation, Auth via Supabase, image capture/pick, upload to server, render results, local history).\par
+- Server: FastAPI service loading a PyTorch model from `best_model.pth`, providing a `/predict/` endpoint returning `top1` and `topK`.\par
+- Networking: `fetch` with multipart `FormData`, timeouts via `AbortController`, base URL from `app.json` ??? `extra.API_BASE_URL`.\par
+- Persistence: `AsyncStorage` stores recent diagnoses and Supabase sessions.\par
+\par
+High???level flow: Home ??? take photo/pick ??? upload ??? receive JSON ??? map to friendly disease info ??? Result screen ??? optional history panel.\par
+\par
+---\par
+\par
+2. App Bootstrap\par
+\par
+File: `App.tsx`\par
+\par
+Purpose: Initialize user settings (language) and render the app's navigation tree.\par
+\par
+```tsx\par
+export default function App() \\{\par
+  const [ready, setReady] = React.useState(false);\par
+  React.useEffect(() => \\{\par
+    (async () => \\{\par
+      const s = await getSettings();\par
+      setI18nLanguage(s.language as any);\par
+      setReady(true);\par
+    \\})();\par
+  \\}, []);\par
+\par
+  if (!ready) return null;\par
+  return (\par
+    <GestureHandlerRootView style=\\{\\{ flex: 1 \\}\\}>\par
+      <RootNavigation />\par
+      <StatusBar style="auto" />\par
+    </GestureHandlerRootView>\par
+  );\par
+\\}\par
+```\par
+\par
+Notes:\par
+- Defers rendering until settings are loaded to avoid flicker.\par
+- Wraps in `GestureHandlerRootView` to support swipe/drag gestures.\par
+\par
+File: `index.ts`\par
+\par
+```ts\par
+import 'react-native-gesture-handler';\par
+import \\{ registerRootComponent \\} from 'expo';\par
+import App from './App';\par
+registerRootComponent(App);\par
+```\par
+\par
+Notes:\par
+- Ensures proper Expo + RN setup across Expo Go and standalone builds.\par
+\par
+---\par
+\par
+3. Configuration\par
+\par
+File: `app.json`\par
+\par
+```json\par
+\\{\par
+  "expo": \\{\par
+    "name": "LeafLens",\par
+    "extra": \\{\par
+      "API_BASE_URL": "http://192.168.29.184:8000",\par
+      "SUPABASE_URL": "https://...supabase.co",\par
+      "SUPABASE_ANON_KEY": "..."\par
+    \\},\par
+    "plugins": [[\par
+      "react-native-fast-tflite",\par
+      \\{ "enableAndroidGpuLibraries": true, "enableCoreMLDelegate": true \\}\par
+    ]]\par
+  \\}\par
+\\}\par
+```\par
+\par
+Notes:\par
+- `extra.API_BASE_URL` drives the client ??? server endpoint.\par
+- Set these per environment; do not commit secrets.\par
+\par
+File: `src/config/api.ts`\par
+\par
+```ts\par
+export function getDefaultBaseUrl() \\{\par
+  return Platform.OS === 'android' ? 'http://10.0.2.2:8080' : 'http://127.0.0.1:8080';\par
+\\}\par
+\par
+export function resolveBaseUrl(override?: string) \\{\par
+  const anyConst = Constants as any;\par
+  const fromExpoConfig = anyConst?.expoConfig?.extra?.API_BASE_URL as string | undefined;\par
+  // ...\par
+  return fromExtra || getDefaultBaseUrl();\par
+\\}\par
+```\par
+\par
+Why it matters:\par
+- Handles emulator/simulator localhost differences.\par
+- Allows override and future `MODEL_NAME` query via `resolveModelQuery()`.\par
+\par
+---\par
+\par
+4. Navigation\par
+\par
+File: `src/navigation/index.tsx`\par
+\par
+- Provides stack routes gated by auth state.\par
+- Applies dark/light theme based on system or user settings.\par
+\par
+```tsx\par
+export type RootStackParamList = \\{\par
+  Home: undefined;\par
+  Result: \\{ label: string; probability: number; topK?: \\{label:string; probability:number\\}[]; imageUri?: string \\};\par
+  // ...\par
+\\};\par
+\par
+function StackContent() \\{\par
+  const \\{ user \\} = useAuth();\par
+  return (\par
+    <Stack.Navigator screenOptions=\\{\\{ headerShown: false \\}\\}>\par
+      \\{user ? (\par
+        <>\par
+          <Stack.Screen name="Home" component=\\{HomeScreen\\} />\par
+          <Stack.Screen name="Result" component=\\{ResultScreen\\} />\par
+          \\{/* other app screens */\\}\par
+        </>\par
+      ) : (\par
+        <>\par
+          <Stack.Screen name="Landing" component=\\{LandingScreen\\} />\par
+          <Stack.Screen name="Login" component=\\{LoginScreen\\} />\par
+          \\{/* auth screens */\\}\par
+        </>\par
+      )\\}\par
+    </Stack.Navigator>\par
+  );\par
+\\}\par
+```\par
+\par
+Notes:\par
+- Deep link `ResetPassword` handled via `linking` config.\par
+\par
+---\par
+\par
+5. Authentication\par
+\par
+File: `src/services/supabaseClient.ts`\par
+\par
+```ts\par
+export const supabase = createClient(SUPABASE_URL || '', SUPABASE_ANON_KEY || '', \\{\par
+  auth: \\{\par
+    persistSession: true,\par
+    storage: \\{\par
+      getItem: (key) => AsyncStorage.getItem(key),\par
+      setItem: (key, val) => AsyncStorage.setItem(key, val),\par
+      removeItem: (key) => AsyncStorage.removeItem(key),\par
+    \\},\par
+  \\},\par
+\\});\par
+\par
+export async function getEmailByUsername(username: string) \\{\par
+  const \\{ data, error \\} = await (supabase as any).rpc('get_email_by_username', \\{ p_username: username.trim() \\});\par
+  if (error) \\{ console.warn('getEmailByUsername error:', error); return null; \\}\par
+  return (data as string) || null;\par
+\\}\par
+```\par
+\par
+File: `src/state/AuthContext.tsx`\par
+\par
+- Owns auth state, login/register/logout, Google OAuth, reset password.\par
+- Cleans legacy keys and listens to Supabase `onAuthStateChange`.\par
+\par
+```tsx\par
+const \\{ data: sub \\} = supabase.auth.onAuthStateChange(async (_event, session) => \\{\par
+  if (session?.user) \\{\par
+    const derivedUsername = (session.user.user_metadata as any)?.username\par
+      || session.user.email?.split('@')[0]\par
+      || 'user';\par
+    setUser(\\{ username: derivedUsername, email: session.user.email || '' \\});\par
+  \\} else \\{\par
+    setUser(null);\par
+  \\}\par
+\\});\par
+```\par
+\par
+Why it matters:\par
+- Centralizes all auth behavior; UI subscribes via `useAuth()`.\par
+\par
+---\par
+\par
+6. Home Screen (Capture/Upload)\par
+\par
+File: `src/screens/HomeScreen.tsx`\par
+\par
+Purpose: Capture or pick a photo, call diagnosis, navigate to `Result`, and store in local history.\par
+\par
+```tsx\par
+const takePhoto = async () => \\{\par
+  const perm = await ImagePicker.requestCameraPermissionsAsync();\par
+  if (!perm.granted) return Alert.alert(t('permissionRequired'), t('allowCameraAccess'));\par
+  const res = await ImagePicker.launchCameraAsync(\\{ quality: 1 \\});\par
+  if (!res.canceled) \\{\par
+    const uri = res.assets[0].uri;\par
+    setBusy(true);\par
+    const json = await diagnoseImage(uri, \\{\\});\par
+    await handleResultNavigate(uri, json);\par
+  \\}\par
+\\};\par
+```\par
+\par
+Result normalization:\par
+\par
+```tsx\par
+const handleResultNavigate = async (imageUri: string, json: any) => \\{\par
+  let topK = [] as \\{ label: string; probability: number \\}[];\par
+  if (Array.isArray(json?.topK)) \\{ /* shape A */ \\}\par
+  else if (Array.isArray(json?.predictions)) \\{ /* shape B */ \\}\par
+  else if (json?.predictions && typeof json.predictions === 'object') \\{ /* dict shape */ \\}\par
+  if (!topK.length && json?.label) \\{ /* fallback single */ \\}\par
+  if (!topK.length) topK = [\\{ label: 'Unknown', probability: 0 \\}];\par
+  const top1 = json?.top1 ? \\{/* map */\\} : topK[0];\par
+  navigation.navigate('Result', \\{ label: top1.label, probability: top1.probability, topK, imageUri \\});\par
+  addDiagnosis(\\{ label: top1.label, probability: top1.probability, imageUri \\}).catch(() => \\{\\});\par
+\\};\par
+```\par
+\par
+Notes:\par
+- Supports multiple API response shapes.\par
+- Adds recent diagnosis with cap to last 5.\par
+\par
+---\par
+\par
+7. Result Screen (Display)\par
+\par
+File: `src/screens/ResultScreen.tsx`\par
+\par
+Purpose: Visualize output with confidence, show top???3 alternatives, and curated info (symptoms/treatment).\par
+\par
+```tsx\par
+\\{imageUri && <Image source=\\{\\{ uri: imageUri \\}\\} style=\\{\\{ width: '100%', height: 240 \\}\\} />\\}\par
+<Text style=\\{\\{ fontSize: 24, fontWeight: '800' \\}\\}>\\{info?.name ?? label\\}</Text>\par
+<ConfidenceBar value=\\{probability\\} />\par
+\\{topK && topK.length > 1 && (\par
+  <Card>\par
+    <Text>\\{t('topPredictions')\\}</Text>\par
+    \\{topK.slice(0, 3).map((r, i) => (\par
+      <Text key=\\{i\\}>#\\{i + 1\\} \\{(getDiseaseInfo(r.label)?.name ?? r.label)\\} - \\{(r.probability * 100).toFixed(1)\\}%</Text>\par
+    ))\\}\par
+  </Card>\par
+)\\}\par
+```\par
+\par
+Notes:\par
+- For ???Unknown??? cases, the Home normalization ensures top predictions aren???t misleading.\par
+\par
+---\par
+\par
+8. History Storage\par
+\par
+File: `src/services/history.ts`\par
+\par
+```ts\par
+export async function addDiagnosis(item: Omit<DiagnosisItem, 'id' | 'at'>) \\{\par
+  const all = await getHistory();\par
+  const next: DiagnosisItem = \\{ id: `$\\{Date.now()\\}`, at: Date.now(), ...item \\};\par
+  const merged = [next, ...all].slice(0, 5);\par
+  await AsyncStorage.setItem(KEY, JSON.stringify(merged));\par
+\\}\par
+```\par
+\par
+Notes:\par
+- Keeps recent list short for performance and clarity.\par
+\par
+---\par
+\par
+9. Banana Knowledge Base\par
+\par
+File: `src/data/bananaInfo.ts`\par
+\par
+- Maps model labels (and aliases) to user???friendly names, symptoms, and treatment guidance.\par
+\par
+```ts\par
+export function getDiseaseInfo(label: string): DiseaseInfo | null \\{\par
+  if (bananaDiseaseLibrary[label]) return bananaDiseaseLibrary[label];\par
+  const n = norm(label);\par
+  const key = aliases[n];\par
+  if (key && bananaDiseaseLibrary[key]) return bananaDiseaseLibrary[key];\par
+  // basic title???case heuristic\par
+  const guess = label.split(/[\\\\_\\\\-\\\\s]+/).map(...).join(' ');\par
+  if (bananaDiseaseLibrary[guess]) return bananaDiseaseLibrary[guess];\par
+  return null;\par
+\\}\par
+```\par
+\par
+Notes:\par
+- Decouples model taxonomy from UI text.\par
+\par
+---\par
+\par
+10. Networking and Upload Robustness\par
+\par
+File: `src/services/cloudInference.ts`\par
+\par
+Purpose: Send image to FastAPI using multipart form data, with timeouts and retries.\par
+\par
+Key features:\par
+- Default 120s timeout (`timeoutMs = 120_000`).\par
+- Two attempts total, each with fresh `AbortController` and `FormData`.\par
+- Port fallback between `8080` and `8000` and endpoint variants with/without trailing slash.\par
+- Friendly error messages for network failures.\par
+\par
+```ts\par
+export async function diagnoseImage(imageUri: string, opts: DiagnoseOptions = \\{\\}) \\{\par
+  const \\{ baseUrl = resolveBaseUrl(), endpointPath = '/predict/', timeoutMs = 120_000 \\} = opts;\par
+  const buildForm = () => \\{ const f = new FormData(); f.append('file', \\{ uri: imageUri, name: 'leaf.jpg', type: 'image/jpeg' \\} as any); return f; \\};\par
+  const tryUrls = /* derive base + port fallbacks */;\par
+  const endpointVariants = [ `$\\{endpointPath\\}$\\{resolveModelQuery()\\}`, endpointPath.replace(/\\\\/$/, '') ];\par
+  for (let attempt = 1; attempt <= 2; attempt++) \\{\par
+    for (const b of tryUrls) for (const ep of endpointVariants) \\{\par
+      const controller = new AbortController();\par
+      const id = setTimeout(() => controller.abort(), timeoutMs);\par
+      try \\{ const res = await fetch(`$\\{b\\}$\\{ep\\}`, \\{ method: 'POST', headers: \\{ Accept: 'application/json' \\}, body: buildForm(), signal: controller.signal \\});\par
+        if (!res.ok) \\{ /* collect lastErrorText and continue */ \\}\par
+        return await res.json();\par
+      \\} catch (e) \\{ /* save error and continue */ \\} finally \\{ clearTimeout(id); \\}\par
+    \\}\par
+  \\}\par
+  throw new Error('All endpoints failed');\par
+\\}\par
+```\par
+\par
+Notes:\par
+- Fresh `FormData` avoids reused stream issues in RN.\par
+- Extended timeout and retry improve reliability on slower networks.\par
+\par
+---\par
+\par
+11. FastAPI Server\par
+\par
+File: `banana_api/app.py`\par
+\par
+- CORS enabled for development.\par
+- Serves `/` health, optional `/ui` static view, and `/predict/` for inference.\par
+\par
+```py\par
+@app.post("/predict/")\par
+async def predict_image_endpoint(file: UploadFile = File(...)):\par
+    contents = await file.read()\par
+    image = Image.open(io.BytesIO(contents))\par
+    confidences = inference.predict_image(MODEL, image)\par
+    sorted_items = sorted(confidences.items(), key=lambda kv: kv[1], reverse=True)\par
+    topK = [\\{"label": k, "probability": float(v)\\} for k, v in sorted_items]\par
+    top1 = topK[0] if topK else \\{"label": "Unknown", "probability": 0.0\\}\par
+    return \\{"top1": top1, "topK": topK, "predictions": topK\\}\par
+```\par
+\par
+File: `banana_api/inference.py`\par
+\par
+- Loads `HybridCNNViT` weights and runs a simple transform + softmax.\par
+\par
+```py\par
+DEVICE = torch.device("cpu")\par
+CHECKPOINT_PATH = os.environ.get("MODEL_PATH", "best_model.pth")\par
+\par
+def load_model():\par
+    loaded_model = HybridCNNViT(NUM_CLASSES).to(DEVICE)\par
+    checkpoint = torch.load(CHECKPOINT_PATH, map_location=DEVICE)\par
+    loaded_model.load_state_dict(checkpoint['model_state_dict'])\par
+    loaded_model.eval()\par
+    return loaded_model\par
+```\par
+\par
+Notes:\par
+- For Docker, use `MODEL_PATH`/`MODEL_URL` env vars.\par
+\par
+---\par
+\par
+12. End???to???End Data Flow\par
+\par
+1) Home: user captures/picks ??? `diagnoseImage(uri)`\par
+2) `cloudInference`: builds `FormData` ??? POST `/predict/` with timeout/retry\par
+3) Server: loads model once ??? predict ??? returns `top1` + `topK`\par
+4) Home: normalizes ??? navigate to `Result`\par
+5) Result: render image, confidence, alternatives, curated info\par
+6) History: store last 5 in `AsyncStorage`\par
+\par
+---\par
+\par
+13. Configuration Tips\par
+\par
+- API base URL: ensure mobile device and server are on the same network; update `app.json ??? extra.API_BASE_URL`.\par
+- Android emulator uses `10.0.2.2:<port>` for host machine.\par
+- Consider `.env` + `app.config.ts` for per???env config in production.\par
+\par
+---\par
+\par
+14. Troubleshooting\par
+\par
+- "Network request failed":\par
+  - Check server is reachable from device IP and port.\par
+  - Verify Windows firewall allows inbound on the selected port.\par
+  - Confirm Docker port mapping if using containers.\par
+- Timeouts:\par
+  - Increase `timeoutMs` in `diagnoseImage` for very large images.\par
+  - Use server logs (Uvicorn) to confirm request arrival.\par
+- Wrong labels:\par
+  - Verify pre???processing matches training (`Resize(224,224)`, normalization).\par
+  - Update `bananaInfo` aliases to map model outputs to friendly names.\par
+\par
+---\par
+\par
+15. Extending the App\par
+\par
+- Offline inference: add a TFJS model or TFLite; wire a local `modelService` with the same return shape as `/predict/`.\par
+- Confidence gating: client can hide `topK` below a threshold or label as ???No disease found???.\par
+- Analytics: add event logging for diagnosis events.\par
+\par
+---\par
+\par
+16. Security Considerations\par
+\par
+- Do not commit Supabase anon keys for production; use environment???specific configs and secure distribution.\par
+- Lock down CORS in FastAPI to known origins for production.\par
+\par
+---\par
+\par
+17. Testing\par
+\par
+- Unit test `bananaInfo` mappings and `history` logic in isolation.\par
+- Integration test upload with a few fixture images against `/predict/`.\par
+\par
+---\par
+\par
+18. Build & Run\par
+\par
+Client (Expo):\par
+\par
+```\par
+# Ensure server is running and API_BASE_URL points to it\par
+npm install\par
+npm start\par
+```\par
+\par
+Server (FastAPI):\par
+\par
+```\par
+# Python 3.10+ and dependencies from banana_api/requirements.txt\par
+cd banana_api\par
+uvicorn app:app --host 0.0.0.0 --port 8000\par
+```\par
+\par
+Docker (server): see `banana_api/README-Docker.md`.\par
+\par
+---\par
+\par
+19. Key Design Choices\par
+\par
+- Simple JSON schema: `top1`, `topK`, and backward???compatible `predictions` array or dict.\par
+- Robust upload: retries + long timeout + endpoint variants.\par
+- Curated info decoupled from model outputs via alias mapping.\par
+\par
+---\par
+\par
+20. Appendix: Selected Excerpts\par
+\par
+A) Abortable fetch with timeout\par
+\par
+```ts\par
+const controller = new AbortController();\par
+const id = setTimeout(() => controller.abort(), timeoutMs);\par
+try \\{ /* fetch */ \\} finally \\{ clearTimeout(id); \\}\par
+```\par
+\par
+B) History ring buffer\par
+\par
+```ts\par
+const merged = [next, ...all].slice(0, 5);\par
+await AsyncStorage.setItem(KEY, JSON.stringify(merged));\par
+```\par
+\par
+C) Model URL override (server)\par
+\par
+```py\par
+CHECKPOINT_PATH = os.environ.get("MODEL_PATH", "best_model.pth")\par
+CHECKPOINT_URL = os.environ.get("MODEL_URL")\par
+```\par
+\par
+\par
+\par
+---\par
+\par
+21. UI Components\par
+\par
+File: `src/ui/components.tsx`\par
+\par
+- Shared building blocks: `Screen`, `Card`, `PrimaryButton`, `Input`, `ConfidenceBar`, `SectionCard`, etc.\par
+\par
+```tsx\par
+export const PrimaryButton: React.FC<\\{ title: string; onPress: () => void; disabled?: boolean; icon?: React.ReactNode \\}>\par
+  = (\\{ title, onPress, disabled, icon \\}) => (\par
+  <TouchableOpacity activeOpacity=\\{0.9\\} onPress=\\{onPress\\} disabled=\\{disabled\\} style=\\{\\{ borderRadius: 12, overflow: 'hidden', opacity: disabled ? 0.6 : 1 \\}\\}>\par
+    <LinearGradient colors=\\{[colors.primary, colors.primaryDark]\\} start=\\{\\{ x: 0, y: 0 \\}\\} end=\\{\\{ x: 1, y: 1 \\}\\} style=\\{\\{ padding: spacing(2), alignItems: 'center' \\}\\}>\par
+      <View style=\\{\\{ flexDirection: 'row', alignItems: 'center', gap: 8 \\}\\}>\par
+        \\{icon\\}\par
+        <Text style=\\{\\{ color: 'white', fontWeight: '700', fontSize: 16 \\}\\}>\\{title\\}</Text>\par
+      </View>\par
+    </LinearGradient>\par
+  </TouchableOpacity>\par
+);\par
+```\par
+\par
+Why it matters:\par
+- Consistent styling and interactions across screens; easy to theme.\par
+\par
+---\par
+\par
+22. Theme System\par
+\par
+File: `src/ui/theme.ts`\par
+\par
+- Central colors, spacing, and shadow. `applyThemeMode()` mutates the `colors` object so imports see live updates.\par
+\par
+```ts\par
+export const colors: ColorPalette = \\{ ...lightPalette \\};\par
+export function applyThemeMode(mode: 'light' | 'dark') \\{\par
+  const palette = mode === 'dark' ? darkPalette : lightPalette;\par
+  Object.assign(colors, palette);\par
+\\}\par
+export const spacing = (n: number) => n * 8;\par
+```\par
+\par
+Why it matters:\par
+- Enables instant dark/light switching without rerender thrash.\par
+\par
+---\par
+\par
+23. App Header\par
+\par
+File: `src/ui/AppHeader.tsx`\par
+\par
+- Compact top bar with logo and quick navigation.\par
+\par
+```tsx\par
+export default function AppHeader(\\{ title, onHome, onCommunity, onHistory, onProfile \\}: Props) \\{\par
+  return (\par
+    <View style=\\{\\{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.bgAlt, paddingHorizontal: spacing(2), paddingVertical: spacing(1.5), borderRadius: 16 \\}\\}>\par
+      <View style=\\{\\{ flexDirection: 'row', alignItems: 'center', gap: 10 \\}\\}>\par
+        <LogoMark size=\\{28\\} />\par
+        <Text style=\\{\\{ color: colors.text, fontWeight: '800', fontSize: 20 \\}\\}>\\{title || t('brand')\\}</Text>\par
+      </View>\par
+      <View style=\\{\\{ flexDirection: 'row', gap: 16 \\}\\}>\par
+        <Text onPress=\\{onHome\\}><Ionicons name="home-outline" size=\\{22\\} color=\\{colors.text\\} /></Text>\par
+        <Text onPress=\\{onCommunity\\}><Ionicons name="people-outline" size=\\{22\\} color=\\{colors.text\\} /></Text>\par
+        <Text onPress=\\{onHistory\\}><Ionicons name="time-outline" size=\\{22\\} color=\\{colors.text\\} /></Text>\par
+        <Text onPress=\\{onProfile\\}><Ionicons name="person-circle-outline" size=\\{22\\} color=\\{colors.text\\} /></Text>\par
+      </View>\par
+    </View>\par
+  );\par
+\\}\par
+```\par
+\par
+---\par
+\par
+24. i18n\par
+\par
+File: `src/i18n.ts`\par
+\par
+- Simple dictionary???based localization for English, Hindi, and Marathi.\par
+\par
+```ts\par
+export type Language = 'English' | 'Hindi' | 'Marathi';\par
+let current: Language = 'English';\par
+const dict: Record<Language, Record<string, string>> = \\{ /* ... */ \\};\par
+export function setLanguage(l: Language) \\{ current = l; \\}\par
+export function t(key: string) \\{ return (dict[current] && dict[current][key]) || key; \\}\par
+```\par
+\par
+Tips:\par
+- Add keys first in English; mirror into other languages gradually.\par
+\par
+---\par
+\par
+25. Settings Service\par
+\par
+File: `src/services/settings.ts`\par
+\par
+- Loads/saves `AppSettings` in `AsyncStorage`; includes a tiny pub???sub to notify listeners on change.\par
+\par
+```ts\par
+export async function updateSettings(patch: Partial<AppSettings>): Promise<AppSettings> \\{\par
+  const cur = cache || (await getSettings());\par
+  const next = \\{ ...cur, ...patch \\} as AppSettings;\par
+  cache = next;\par
+  await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(next));\par
+  notify(next);\par
+  return next;\par
+\\}\par
+```\par
+\par
+Why it matters:\par
+- Navigation applies theme mode reactively via `subscribeSettings`.\par
+\par
+---\par
+\par
+26. Auth Screens\par
+\par
+Files: `src/screens/LoginScreen.tsx`, `src/screens/RegisterScreen.tsx`, `src/screens/ResetPasswordScreen.tsx`\par
+\par
+- Showcase patterns for form inputs, validation, and calling `AuthContext` helpers.\par
+\par
+```tsx\par
+const onLogin = async () => \\{\par
+  const result = await login(identifier.trim().toLowerCase(), password);\par
+  if (!result.ok) \\{ /* friendly alerts incl. resend verification */ \\}\par
+\\};\par
+```\par
+\par
+Notes:\par
+- Google OAuth via Supabase PKCE is one tap in both screens.\par
+\par
+---\par
+\par
+27. Community Feature\par
+\par
+Files: `src/screens/CommunityScreen.tsx`, `src/services/community.ts`\par
+\par
+- Minimal forum with categories, local fallback storage, and optional Supabase backend.\par
+\par
+```ts\par
+export async function listPosts(): Promise<CommunityPost[]> \\{\par
+  try \\{\par
+    const \\{ data, error \\} = await supabase.from('posts').select('id,title,content,category,created_at,author_id,author_name').order('created_at', \\{ ascending: false \\});\par
+    if (!error && data) \\{ /* normalize and return */ \\}\par
+  \\} catch \\{\\}\par
+  return storageGet();\par
+\\}\par
+```\par
+\par
+Why it matters:\par
+- Demonstrates resilient data access (online/offline) and basic CRUD.\par
+\par
+---\par
+\par
+28. History Screen\par
+\par
+File: `src/screens/HistoryScreen.tsx`\par
+\par
+- Reads `AsyncStorage` history and allows clearing.\par
+\par
+```tsx\par
+const sub = navigation.addListener('focus', async () => setItems(await getHistory()));\par
+```\par
+\par
+---\par
+\par
+29. Profile & Settings Screens\par
+\par
+Files: `src/screens/ProfileScreen.tsx`, `src/screens/SettingsScreen.tsx`\par
+\par
+- Profile shows user info and provides logout; Settings changes theme/language and exposes utilities.\par
+\par
+```tsx\par
+<TouchableOpacity onPress=\\{async () => \\{ await logout(); \\}\\} style=\\{\\{ backgroundColor: '#EF4444' \\}\\}>\par
+  <Text style=\\{\\{ color: 'white', fontWeight: '800' \\}\\}>\\{t('logout')\\}</Text>\par
+</TouchableOpacity>\par
+```\par
+\par
+---\par
+\par
+30. Shims for Expo\par
+\par
+Files: `src/shims/expo-camera.js`, `src/shims/react-native-fs.js`\par
+\par
+- Provide minimal modules so third???party libraries bundle under Expo managed workflow.\par
+\par
+```js\par
+// expo-camera shim\par
+module.exports = \\{ Camera: function Camera() \\{ throw new Error('expo-camera is not available in this build; use ImagePicker'); \\} \\};\par
+```\par
+\par
+```js\par
+// react-native-fs shim\par
+module.exports = \\{ readFile: async (uri) => await FileSystem.readAsStringAsync(uri, \\{ encoding: 'base64' \\}) \\};\par
+```\par
+\par
+---\par
+\par
+31. Health Check Utility\par
+\par
+File: `src/services/health.ts`\par
+\par
+```ts\par
+export async function pingApi(): Promise<boolean> \\{\par
+  try \\{ const base = resolveBaseUrl(); const res = await fetch(`$\\{base\\}/`, \\{ method: 'GET' \\}); return res.ok; \\} catch \\{ return false; \\}\par
+\\}\par
+```\par
+\par
+Usage:\par
+- Can be called on app start to warn if server is unreachable.\par
+\par
+---\par
+\par
+32. Model Service Stubs\par
+\par
+File: `src/services/modelService.ts`\par
+\par
+- Provides a future path for fully offline inference; currently returns a stable stub result and loads labels.\par
+\par
+```ts\par
+export async function runInference(_imageUri: string): Promise<InferenceBundle> \\{\par
+  const top1 = \\{ label: classLabels[0] || 'Healthy', probability: 0.5 \\};\par
+  return \\{ top1, topK: [top1] \\};\par
+\\}\par
+```\par
+\par
+Notes:\par
+- Swap to TFJS/TFLite/ONNX later; keep the return shape consistent with `/predict/`.\par
+\par
+---\par
+\par
+33. Mock API (Dev)\par
+\par
+File: `server/mock-api/index.js`\par
+\par
+- Placeholder for a local Node mock if needed; can return canned predictions for UI development.\par
+\par
+---\par
+\par
+34. Service Barrel\par
+\par
+File: `src/services/index.ts`\par
+\par
+- Aggregates service exports; currently points health + a placeholder tflite service.\par
+\par
+```ts\par
+export * from './health';\par
+export * from './tfliteService';\par
+```\par
+\par
+---\par
+\par
+35. Next Steps\par
+\par
+- Migrate offline inference from stub to a concrete backend (TFJS or TFLite) and gate via Settings ??? Offline Mode.\par
+- Add instrumented logging for upload timings to improve retry/backoff logic.\par
+- Write unit tests for `settings`, `bananaInfo`, and `community` helpers.\par
+\par
+---\par
+\par
+36. Build & Tooling Config\par
+\par
+Files: `metro.config.js`, `babel.config.js`, `package.json`\par
+\par
+- Metro (bundler) extensions for ML assets, Babel preset for Expo, and app scripts/dependencies.\par
+\par
+`metro.config.js`\par
+\par
+```js\par
+const \\{ getDefaultConfig \\} = require('expo/metro-config');\par
+const base = getDefaultConfig(__dirname);\par
+module.exports = \\{\par
+  ...base,\par
+  resolver: \\{\par
+    ...(base.resolver || \\{\\}),\par
+    assetExts: [\par
+      ...((base.resolver && base.resolver.assetExts) || []),\par
+      'bin',\par
+      'tflite'\par
+    ],\par
+  \\},\par
+\\};\par
+```\par
+\par
+Why it matters:\par
+- Allows bundling `.tflite` (and custom `.bin`) model files when moving to on???device inference.\par
+\par
+`babel.config.js`\par
+\par
+```js\par
+module.exports = function (api) \\{\par
+  api.cache(true);\par
+  return \\{ presets: ['babel-preset-expo'] \\};\par
+\\};\par
+```\par
+\par
+Notes:\par
+- Keeps transforms aligned with Expo SDK; add plugins here if needed later.\par
+\par
+`package.json`\par
+\par
+```json\par
+\\{\par
+  "main": "index.ts",\par
+  "scripts": \\{\par
+    "start": "expo start",\par
+    "android": "expo start --android",\par
+    "ios": "expo start --ios",\par
+    "web": "expo start --web"\par
+  \\},\par
+  "dependencies": \\{\par
+    "expo": "~54.0.13",\par
+    "react": "19.1.0",\par
+    "react-native": "0.81.4",\par
+    "@supabase/supabase-js": "^2.75.1",\par
+    "react-native-fast-tflite": "^1.6.1"\par
+  \\}\par
+\\}\par
+```\par
+\par
+Tips:\par
+- When adding native ML libs (e.g., TFLite, ONNX), prefer Expo Dev Builds and ensure Metro asset extensions include model formats.\par
+\par
+\par
+\par
+\par
+\par
+}

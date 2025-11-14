@@ -1,3 +1,8 @@
+"""
+Model definition: HybridCNNViT
+- Combines a ViT-Large backbone with a small CNN head and a final classifier.
+"""
+
 import torch
 import torch.nn as nn
 import timm

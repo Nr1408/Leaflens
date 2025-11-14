@@ -1,3 +1,6 @@
+// Settings screen
+// Purpose: Let users set theme (system/light/dark), pick language,
+// and access utility actions like clearing diagnosis history.
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Linking, TouchableOpacity } from 'react-native';
 import { Screen, SettingRow, SectionCard } from '../ui/components';
@@ -20,6 +23,7 @@ export default function SettingsScreen({ navigation }: Props) {
   const [themeOpen, setThemeOpen] = useState(false);
 
   useEffect(() => {
+    // Load current settings when the screen mounts.
     (async () => {
       const s = await getSettings();
       setLanguage(s.language);
@@ -43,6 +47,7 @@ export default function SettingsScreen({ navigation }: Props) {
           <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: '600', marginTop: spacing(0.5), marginBottom: spacing(1) }}>{t('preferences')}</Text>
           <View style={{ gap: 8 }}>
           <Text style={{ color: colors.text, fontWeight: '700' }}>{t('theme')}</Text>
+            {/* Theme dropdown (system/light/dark). We keep it open after changes so users see the immediate effect. */}
             <TouchableOpacity onPress={() => setThemeOpen(o => !o)} activeOpacity={0.8} style={{ borderWidth: 1, borderColor: colors.divider, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <Text style={{ color: colors.text }}>
                 {theme === 'system' ? t('themeSystem') : theme === 'light' ? t('themeLight') : t('themeDark')}
@@ -60,6 +65,7 @@ export default function SettingsScreen({ navigation }: Props) {
             )}
             <View style={{ height: spacing(1) }} />
           <Text style={{ color: colors.text, fontWeight: '700' }}>{t('appLanguage')}</Text>
+            {/* Language picker using our i18n module. Saves immediately. */}
             <TouchableOpacity onPress={() => setLanguageOpen(o => !o)} activeOpacity={0.8} style={{ borderWidth: 1, borderColor: colors.divider, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <Text style={{ color: colors.text }}>{language}</Text>
               <Text style={{ color: colors.text }}>▾</Text>
@@ -78,6 +84,7 @@ export default function SettingsScreen({ navigation }: Props) {
 
   <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: '600', marginTop: spacing(3), marginBottom: spacing(1) }}>{t('tools')}</Text>
           <View>
+          {/* Utility actions */}
           <SettingRow title={t('clearHistory')} subtitle={t('clearHistorySub')} onPress={async () => { await clearHistory(); }} />
           <SettingRow title={t('sendToExpert')} subtitle="Share case with an agronomist" onPress={() => {}} />
           </View>

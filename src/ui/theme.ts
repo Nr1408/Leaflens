@@ -1,3 +1,8 @@
+/*
+  Theme
+  - Centralized colors, spacing, and shadows. applyThemeMode mutates `colors`
+    so components can import a live object for light/dark updates.
+*/
 export type ColorPalette = {
   bg: string;
   bg2: string; // secondary background for gradients

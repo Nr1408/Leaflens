@@ -1,3 +1,11 @@
+<#
+.SYNOPSIS
+    Opens Windows Firewall ports used by FastAPI and Expo dev tools.
+
+.NOTES
+    Run PowerShell as Administrator before executing this script.
+#>
+
 # Requires: Administrator
 # Opens inbound firewall rules for FastAPI (8000) and Expo/Metro dev ports
 $ErrorActionPreference = 'Stop'

@@ -1,3 +1,6 @@
+// Placeholder for a future TFLite inference service.
+// Actual on-device inference currently uses TorchScript via native module.
+
 // Local inference service using a bundled model.
 // NOTE: This stub ensures the app runs without the server while we wire up true TFLite/TFJS inference.
 // It exposes the same diagnoseImage() shape used by the UI.

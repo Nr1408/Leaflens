@@ -1,3 +1,6 @@
+// Reset Password screen
+// Purpose: Let users set a new password after a reset flow.
+// Uses Supabase auth.updateUser to save the new password.
 import React, { useState } from 'react';
 import { View, Text, Alert, StyleSheet } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -18,12 +21,14 @@ export default function ResetPasswordScreen({ navigation }: Props) {
   const [busy, setBusy] = useState(false);
 
   const onUpdate = async () => {
+    // Simple validation before requesting an update.
     if (password.length < 6) return Alert.alert(t('weakPassword4'), t('weakPassword6'));
     if (password !== confirm) return Alert.alert(t('passwordMismatch'), t('confirmPasswordMustMatch'));
     setBusy(true);
     try {
       const { error } = await supabase.auth.updateUser({ password });
       if (error) return Alert.alert(t('updateFailed'), error.message);
+      // After success, send user to Home if logged in; otherwise back to Login.
       Alert.alert(t('success'), t('passwordUpdated'), [
         { text: t('continue'), onPress: () => navigation.replace(user ? 'Home' : 'Login') }
       ]);

@@ -1,3 +1,6 @@
+// Disease details screen
+// Purpose: Show extra information for a specific disease label including
+// confidence (if provided), symptoms, and treatment suggestions.
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -14,6 +17,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'DiseaseDetail'>;
 
 export default function DiseaseDetailScreen({ route, navigation }: Props) {
   const { label, probability } = route.params;
+  // Map raw label to a friendly info block (name, symptoms, treatment)
   const info = getDiseaseInfo(label);
 
   return (
@@ -29,6 +33,7 @@ export default function DiseaseDetailScreen({ route, navigation }: Props) {
         <Text style={{ color: colors.textMuted }}>{t('learnMore')}</Text>
       </SectionCard>
       <ScrollView contentContainerStyle={{ paddingBottom: spacing(6) }} showsVerticalScrollIndicator={false}>
+        {/* Big initial letter badge (simple visual) */}
         <View style={[base.heroCircle, { backgroundColor: colors.surface }]}>
           <Text style={{ color: colors.text, fontSize: 42, fontWeight: '800' }}>{(info?.name || label).charAt(0)}</Text>
         </View>

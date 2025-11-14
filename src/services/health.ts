@@ -1,3 +1,4 @@
+// Simple health check utility to ping the API root
 import { resolveBaseUrl } from '../config/api';
 
 export async function pingApi(): Promise<boolean> {

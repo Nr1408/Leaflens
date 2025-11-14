@@ -1,3 +1,8 @@
+"""
+Start an ngrok HTTP tunnel to expose the local FastAPI server.
+- Writes the public URL to C:\LeafLens\tunnel_url.txt for quick sharing.
+"""
+
 import time
 from pathlib import Path
 

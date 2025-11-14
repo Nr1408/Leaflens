@@ -1,3 +1,6 @@
+// My Plants screen (placeholder)
+// Shows a simple list of sample plants with a severity tag,
+// plus some general care tips. Replace SAMPLE with real user data later.
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, FlatList } from 'react-native';
 import { Screen, SectionCard, SeverityTag } from '../ui/components';
