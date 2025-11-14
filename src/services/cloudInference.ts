@@ -6,7 +6,7 @@ export type DiagnoseOptions = {
   fileFieldName?: string; // default 'file'
   filename?: string; // default 'leaf.jpg'
   mimeType?: string; // default 'image/jpeg'
-  timeoutMs?: number; // default 60000
+  timeoutMs?: number; // default 120000
 };
 
 export async function diagnoseImage(imageUri: string, opts: DiagnoseOptions = {}) {
@@ -16,15 +16,15 @@ export async function diagnoseImage(imageUri: string, opts: DiagnoseOptions = {}
     fileFieldName = 'file',
     filename = 'leaf.jpg',
     mimeType = 'image/jpeg',
-    timeoutMs = 60_000,
+    timeoutMs = 120_000,
   } = opts;
 
-  const form = new FormData();
-  form.append(fileFieldName, { uri: imageUri, name: filename, type: mimeType } as any);
-
-  // Setup timeout controller
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeoutMs);
+  // Build a fresh FormData per attempt because RN may consume streams
+  const buildForm = () => {
+    const f = new FormData();
+    f.append(fileFieldName, { uri: imageUri, name: filename, type: mimeType } as any);
+    return f;
+  };
   try {
     // Build a list of base URLs to try (port fallback between 8080 and 8000)
     const tryUrls = (() => {
@@ -58,24 +58,33 @@ export async function diagnoseImage(imageUri: string, opts: DiagnoseOptions = {}
       endpointPath,
       endpointPath.replace(/\/$/, ''),
     ]));
-    for (const b of tryUrls) {
-      for (const ep of endpointVariants) {
-        try {
-          const res = await fetch(`${b}${ep}`, {
-            method: 'POST',
-            headers: { Accept: 'application/json' },
-            body: form,
-            signal: controller.signal,
-          });
-          if (!res.ok) {
-            const text = await res.text().catch(() => '');
-            lastErrorText = `Server ${res.status}: ${text || res.statusText}`;
+    // Try twice with fresh AbortController and FormData each time
+    const attempts = 2;
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      for (const b of tryUrls) {
+        for (const ep of endpointVariants) {
+          // Setup per-request timeout controller
+          const controller = new AbortController();
+          const id = setTimeout(() => controller.abort(), timeoutMs);
+          try {
+            const res = await fetch(`${b}${ep}`, {
+              method: 'POST',
+              headers: { Accept: 'application/json' },
+              body: buildForm(),
+              signal: controller.signal,
+            });
+            if (!res.ok) {
+              const text = await res.text().catch(() => '');
+              lastErrorText = `Server ${res.status}: ${text || res.statusText}`;
+              continue;
+            }
+            return await res.json();
+          } catch (inner: any) {
+            lastErrorText = String(inner?.message || inner);
             continue;
+          } finally {
+            clearTimeout(id);
           }
-          return await res.json();
-        } catch (inner: any) {
-          lastErrorText = String(inner?.message || inner);
-          continue;
         }
       }
     }
@@ -89,7 +98,5 @@ export async function diagnoseImage(imageUri: string, opts: DiagnoseOptions = {}
       );
     }
     throw e;
-  } finally {
-    clearTimeout(id);
   }
 }

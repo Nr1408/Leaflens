@@ -56,3 +56,13 @@ banana_api/ENV/
 banana_api/.env.local
 banana_api/.python-version
 banana_api/best_model.pth
+
+# Local Python virtual envs outside banana_api
+.venv*/
+convert/.venv*/
+
+# Large model artifacts not meant for git
+assets/models/**/*.ptl
+assets/models/**/*.pt
+assets/models/**/*.pth
+assets/models/**/*.onnx
