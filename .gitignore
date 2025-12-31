@@ -1,0 +1,72 @@
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.env*.local
+
+# typescript
+*.tsbuildinfo
+
+# generated native folders
+/ios
+/android
+
+# Python (backend / labs)
+.venv/
+**/__pycache__/
+**/*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.log
+banana_api/.venv/
+banana_api/.venv-api/
+banana_api/.env
+banana_api/venv/
+banana_api/ENV/
+banana_api/.env.local
+banana_api/.python-version
+banana_api/best_model.pth
+
+# Local Python virtual envs outside banana_api
+.venv*/
+convert/.venv*/
+
+# Large model artifacts not meant for git
+assets/models/**/*.ptl
+assets/models/**/*.pt
+assets/models/**/*.pth
+assets/models/**/*.onnx
+
+# Editor and temp files
+.idea/
+safe.patch
