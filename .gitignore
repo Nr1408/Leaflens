@@ -70,3 +70,8 @@ assets/models/**/*.onnx
 # Editor and temp files
 .idea/
 safe.patch
+node_modules/
+
+# Ensure local workspace venvs are ignored
+.venv/
+
