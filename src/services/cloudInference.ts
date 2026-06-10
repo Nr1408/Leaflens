@@ -1,4 +1,5 @@
 import { resolveBaseUrl, resolveModelQuery } from '../config/api';
+import * as FileSystem from 'expo-file-system/legacy';
 
 export type DiagnoseOptions = {
   baseUrl?: string;
@@ -19,6 +20,98 @@ export async function diagnoseImage(imageUri: string, opts: DiagnoseOptions = {}
     timeoutMs = 120_000,
   } = opts;
 
+  // Detect if the endpoint is a Hugging Face Gradio Space
+  const isGradio = baseUrl.includes('.hf.space') || baseUrl.includes('gradio');
+
+  if (isGradio) {
+    try {
+      const base64 = await FileSystem.readAsStringAsync(imageUri, { encoding: 'base64' as any });
+      const dataUri = `data:${mimeType};base64,${base64}`;
+      const sessionHash = Math.random().toString(36).substring(2);
+
+      // 1. Join the Gradio queue
+      // Gradio v4 expects an ImageData dict for images, not just a raw string
+      const joinRes = await fetch(`${baseUrl}/gradio_api/queue/join`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: [{ url: dataUri }], fn_index: 0, session_hash: sessionHash })
+      });
+      if (!joinRes.ok) throw new Error(`Queue Join Failed: ${joinRes.status}`);
+
+      // 2. Listen to the Server-Sent Events stream using XMLHttpRequest (RN compatible)
+      const outputData = await new Promise<any>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', `${baseUrl}/gradio_api/queue/data?session_hash=${sessionHash}`, true);
+        xhr.setRequestHeader('Accept', 'text/event-stream');
+
+        // Failsafe timeout
+        const timeoutId = setTimeout(() => { xhr.abort(); reject(new Error('Queue timeout')); }, timeoutMs);
+
+        xhr.onprogress = () => {
+          const text = xhr.responseText;
+          const lines = text.split('\n');
+          for (const line of lines) {
+            if (line.trim().startsWith('data: ')) {
+              try {
+                const json = JSON.parse(line.substring(6));
+                if (json.msg === 'process_completed') {
+                  clearTimeout(timeoutId);
+                  xhr.abort();
+                  if (!json.success) {
+                    reject(new Error(json.output?.error || 'Gradio inference failed'));
+                    return;
+                  }
+                  resolve(json.output.data[0]);
+                }
+              } catch (e) {
+                // Ignore incomplete JSON chunks
+              }
+            }
+          }
+        };
+
+        xhr.onerror = () => {
+          clearTimeout(timeoutId);
+          reject(new Error('XHR stream error'));
+        };
+        xhr.send();
+      });
+
+      // Helper to shorten long labels from the model
+      const formatLabel = (label: string) => {
+        if (label.includes('Not a banana plant image')) {
+          return 'Not a Banana Plant';
+        }
+        return label;
+      };
+
+      // Parse Gradio gr.Label() output format
+      if (outputData && typeof outputData === 'object' && Array.isArray(outputData.confidences)) {
+        const topK = outputData.confidences.map((c: any) => ({
+          label: formatLabel(String(c.label)),
+          probability: Number(c.confidence || 0)
+        }));
+        return {
+          top1: topK[0] || { label: formatLabel(outputData.label || 'Unknown'), probability: 1.0 },
+          topK,
+          predictions: topK
+        };
+      } else if (outputData && typeof outputData === 'object') {
+        const entries = Object.entries(outputData).map(([k, v]) => ({ label: formatLabel(k), probability: Number(v) }));
+        entries.sort((a, b) => b.probability - a.probability);
+        return {
+          top1: entries[0] || { label: 'Unknown', probability: 0 },
+          topK: entries,
+          predictions: entries
+        };
+      }
+      
+      throw new Error('Unexpected Gradio response format');
+    } catch (e: any) {
+      throw e;
+    }
+  }
+
   // Build a fresh FormData per attempt because RN may consume streams
   const buildForm = () => {
     const f = new FormData();
@@ -36,6 +129,7 @@ export async function diagnoseImage(imageUri: string, opts: DiagnoseOptions = {}
           if (u.port === '8080') candidates.add(`${u.protocol}//${u.hostname}:8000`);
           if (u.port === '8000') candidates.add(`${u.protocol}//${u.hostname}:8080`);
         } else {
+          candidates.add(baseUrl);
           candidates.add(`${u.protocol}//${u.hostname}:8080`);
           candidates.add(`${u.protocol}//${u.hostname}:8000`);
         }
